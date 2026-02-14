@@ -1,0 +1,5 @@
+{
+  "name": "Lumina Studio",
+  "description": "A high-end, aesthetic AI image generation workspace powered by Google Gemini, featuring multi-model support, aspect ratio controls, and a sleek gallery interface.",
+  "requestFramePermissions": []
+}

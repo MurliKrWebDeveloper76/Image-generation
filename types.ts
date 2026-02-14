@@ -42,8 +42,8 @@ declare global {
   }
 
   interface Window {
-    // Added readonly and optional modifiers to match pre-configured declarations and fix identical modifiers error.
-    readonly aistudio?: AIStudio;
+    // Removed readonly and optional modifiers to resolve identical modifiers error with pre-configured environment declarations.
+    aistudio: AIStudio;
   }
 }
 

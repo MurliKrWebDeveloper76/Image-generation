@@ -13,7 +13,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
   const aspectRatios: AspectRatio[] = ["1:1", "3:4", "4:3", "9:16", "16:9"];
   const imageSizes: ImageSize[] = ["1K", "2K", "4K"];
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true); // Default true to prevent immediate flicker
 
   useEffect(() => {
     const checkKey = async () => {
@@ -30,6 +30,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
   const handleSelectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
+      // Assume success due to race condition rules
       setHasApiKey(true);
     }
   };
@@ -115,8 +116,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
             }`}
           >
             <div className={`w-2 h-2 rounded-full ${settings.model === 'gemini-2.5-flash-image' ? 'bg-blue-400 shadow-[0_0_8px_#3b82f6]' : 'bg-slate-700'}`}></div>
-            <div className="text-left">
-              <div className="text-xs font-bold">Flash 2.5</div>
+            <div className="text-left flex-1">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold">Flash 2.5</div>
+                {!hasApiKey && <span className="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded">KEY?</span>}
+              </div>
               <div className="text-[9px] text-slate-500 uppercase tracking-tighter">Fast & Responsive</div>
             </div>
           </button>
@@ -140,11 +144,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
         </div>
       </section>
 
-      {settings.model === 'gemini-3-pro-image-preview' && !hasApiKey && (
+      {!hasApiKey && (
         <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl animate-in fade-in slide-in-from-top-4 duration-500">
           <p className="text-[10px] text-amber-300/80 mb-3 font-medium leading-relaxed">
             <i className="fas fa-key mr-1.5"></i> 
-            Studio Pro requires a paid API key for generation. 
+            Generation requires a selected API key in this environment. 
             <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline ml-1">Docs</a>
           </p>
           <button 
@@ -198,10 +202,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
 
       <button
         onClick={onGenerate}
-        disabled={isGenerating || !settings.prompt.trim() || (settings.model === 'gemini-3-pro-image-preview' && !hasApiKey)}
+        disabled={isGenerating || !settings.prompt.trim() || !hasApiKey}
         className={`w-full mt-4 py-4 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 btn-premium shadow-xl ${
-          isGenerating || !settings.prompt.trim() || (settings.model === 'gemini-3-pro-image-preview' && !hasApiKey)
-            ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed border border-white/5'
+          isGenerating || !settings.prompt.trim() || !hasApiKey
+            ? 'bg-slate-950/50 text-slate-700 cursor-not-allowed border border-white/5'
             : 'accent-gradient text-white hover:shadow-blue-500/20'
         }`}
       >

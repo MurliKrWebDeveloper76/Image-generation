@@ -31,7 +31,7 @@ const SkeletonCard = () => {
 
   return (
     <div className="glass rounded-2xl overflow-hidden mb-6 flex flex-col p-3 space-y-3 shadow-xl border-white/5 animate-pulse">
-      <div className="w-full aspect-square skeleton rounded-xl flex items-center justify-center bg-slate-900/40">
+      <div className="w-full aspect-square skeleton rounded-xl flex items-center justify-center bg-slate-950/40">
         <div className="flex flex-col items-center gap-4">
           <i className="fas fa-atom fa-spin text-3xl text-blue-500/40"></i>
           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">{LOADING_MESSAGES[msgIdx]}</span>
@@ -94,12 +94,12 @@ const App: React.FC = () => {
     scrollToStudio();
 
     try {
-      // Check for API key if using a Pro model
-      if (settings.model === 'gemini-3-pro-image-preview' && window.aistudio) {
+      // Check for API key presence if window.aistudio is available
+      if (window.aistudio) {
         const hasKey = await window.aistudio.hasSelectedApiKey();
-        if (!hasKey) {
+        // If it's a Pro model or if we previously got an API error, ensure a key is selected
+        if (!hasKey && (settings.model === 'gemini-3-pro-image-preview' || error?.includes("Key"))) {
           await window.aistudio.openSelectKey();
-          // We proceed assuming the key was selected as per race condition rules
         }
       }
 
@@ -122,10 +122,11 @@ const App: React.FC = () => {
       setHistory(prev => [newImage, ...prev]);
     } catch (err: any) {
       console.error("App generation error:", err);
-      // Re-trigger key selection if an authorization error occurs
-      if (err.message === 'API_KEY_ERROR' && window.aistudio) {
-        setError("API Session invalid. Please select a valid key from a paid project.");
-        await window.aistudio.openSelectKey();
+      if (err.message === 'API_KEY_ERROR' || err.message.includes("API Key")) {
+        setError("API Key required. Please select a valid API key from a paid project to enable generation.");
+        if (window.aistudio) {
+          await window.aistudio.openSelectKey();
+        }
       } else if (err.message.includes("safety")) {
         setError("Content policy violation: The prompt or result was filtered for safety.");
       } else {
@@ -268,8 +269,8 @@ const App: React.FC = () => {
                   <i className="fas fa-circle-exclamation text-sm mt-0.5"></i>
                   <div className="flex-1">
                     <p>{error}</p>
-                    {error.includes("Key") && (
-                       <button onClick={() => window.aistudio?.openSelectKey()} className="mt-2 text-blue-400 underline uppercase tracking-widest text-[10px]">Update Key Selection</button>
+                    {(error.includes("Key") || error.includes("API")) && (
+                       <button onClick={() => window.aistudio?.openSelectKey()} className="mt-2 text-blue-400 underline uppercase tracking-widest text-[10px] block">Update API Key Selection</button>
                     )}
                   </div>
                 </div>

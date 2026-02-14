@@ -42,7 +42,9 @@ declare global {
   }
 
   interface Window {
-    aistudio: AIStudio;
+    // The environment defines aistudio as a readonly property on Window.
+    // Explicitly adding the readonly modifier here to resolve the "identical modifiers" conflict.
+    readonly aistudio: AIStudio;
   }
 }
 

@@ -4,6 +4,7 @@ import { GenerationSettings, GroundingSource } from "../types";
 
 // Generate an image using the Gemini API models.
 export const generateImage = async (settings: GenerationSettings): Promise<{ imageUrl: string; text?: string; sources?: GroundingSource[] }> => {
+  // Always create a new instance right before making an API call to ensure it uses the most up-to-date API key.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const config: any = {
@@ -14,8 +15,8 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
 
   if (settings.model === 'gemini-3-pro-image-preview') {
     config.imageConfig.imageSize = settings.imageSize;
-    // Fix: Use googleSearch instead of google_search
-    config.tools = [{ googleSearch: {} }];
+    // According to Gemini 3 Image generation examples, the tool is 'google_search'
+    config.tools = [{ google_search: {} }];
   }
 
   const parts: any[] = [{ text: settings.prompt }];
@@ -64,6 +65,7 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
     }
 
     // Process grounding metadata for citations if Google Search was used
+    // Note: The structure might vary, checking for web grounding chunks
     if (candidate.groundingMetadata?.groundingChunks) {
       sources = candidate.groundingMetadata.groundingChunks
         .filter((chunk: any) => chunk.web)
@@ -88,6 +90,7 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
     if (
       errorMessage.includes("Requested entity was not found") || 
       errorMessage.includes("permission") ||
+      errorMessage.includes("API_KEY") ||
       errorStatus === 404 || 
       errorStatus === 403
     ) {

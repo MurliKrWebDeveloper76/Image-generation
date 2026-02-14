@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+
+import React, { useRef, useState, useEffect } from 'react';
 import { AspectRatio, ModelType, ImageSize, GenerationSettings } from '../types';
 
 interface ControlPanelProps {
@@ -12,6 +13,26 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
   const aspectRatios: AspectRatio[] = ["1:1", "3:4", "4:3", "9:16", "16:9"];
   const imageSizes: ImageSize[] = ["1K", "2K", "4K"];
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const has = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(has);
+      }
+    };
+    checkKey();
+    const interval = setInterval(checkKey, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSelectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,7 +60,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
   };
 
   return (
-    <div className="w-full lg:w-[400px] flex flex-col gap-8 p-6 glass rounded-2xl h-fit sticky top-24 transition-all border-white/5 hover:border-white/10 shadow-2xl">
+    <div className="w-full lg:w-[400px] flex flex-col gap-8 p-6 glass rounded-2xl h-fit sticky top-24 transition-all border-white/5 hover:border-white/10 shadow-2xl z-10">
       <section>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 flex items-center gap-2">
@@ -57,7 +78,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
             className="w-full h-32 border border-white/5 rounded-xl bg-slate-950/40 flex flex-col items-center justify-center gap-2 hover:bg-slate-900/50 hover:border-blue-500/30 transition-all cursor-pointer group shadow-inner"
           >
             <i className="fas fa-cloud-arrow-up text-slate-500 group-hover:text-blue-400 text-lg transition-colors"></i>
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest group-hover:text-slate-300 transition-colors">Drop Reference Asset</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest group-hover:text-slate-300 transition-colors text-center px-4">Upload Context Image</span>
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -108,13 +129,32 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
             }`}
           >
             <div className={`w-2 h-2 rounded-full ${settings.model === 'gemini-3-pro-image-preview' ? 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]' : 'bg-slate-700'}`}></div>
-            <div className="text-left">
-              <div className="text-xs font-bold">Studio Pro 3</div>
-              <div className="text-[9px] text-slate-500 uppercase tracking-tighter">Artistic Quality</div>
+            <div className="text-left flex-1">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold">Studio Pro 3</div>
+                {!hasApiKey && <span className="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded">KEY REQ</span>}
+              </div>
+              <div className="text-[9px] text-slate-500 uppercase tracking-tighter">Artistic Quality + Search</div>
             </div>
           </button>
         </div>
       </section>
+
+      {settings.model === 'gemini-3-pro-image-preview' && !hasApiKey && (
+        <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl animate-in fade-in slide-in-from-top-4 duration-500">
+          <p className="text-[10px] text-amber-300/80 mb-3 font-medium leading-relaxed">
+            <i className="fas fa-key mr-1.5"></i> 
+            Studio Pro requires a paid API key for generation. 
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline ml-1">Docs</a>
+          </p>
+          <button 
+            onClick={handleSelectKey}
+            className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all"
+          >
+            Select API Key
+          </button>
+        </div>
+      )}
 
       <section>
         <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-4">Composition</h3>
@@ -125,7 +165,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
               onClick={() => setSettings(prev => ({ ...prev, aspectRatio: ratio }))}
               className={`py-2 rounded-lg text-[10px] font-bold border transition-all ${
                 settings.aspectRatio === ratio 
-                  ? 'bg-slate-800 border-blue-500/40 text-white' 
+                  ? 'bg-slate-800 border-blue-500/40 text-white shadow-lg' 
                   : 'bg-slate-950/30 border-white/5 text-slate-500 hover:border-white/10'
               }`}
             >
@@ -158,15 +198,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
 
       <button
         onClick={onGenerate}
-        disabled={isGenerating || !settings.prompt.trim()}
+        disabled={isGenerating || !settings.prompt.trim() || (settings.model === 'gemini-3-pro-image-preview' && !hasApiKey)}
         className={`w-full mt-4 py-4 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 btn-premium shadow-xl ${
-          isGenerating || !settings.prompt.trim()
+          isGenerating || !settings.prompt.trim() || (settings.model === 'gemini-3-pro-image-preview' && !hasApiKey)
             ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed border border-white/5'
             : 'accent-gradient text-white hover:shadow-blue-500/20'
         }`}
       >
         {isGenerating ? (
-          <><i className="fas fa-atom fa-spin text-sm"></i> Generating...</>
+          <><i className="fas fa-atom fa-spin text-sm"></i> Synthesizing...</>
         ) : (
           <><i className="fas fa-sparkles text-sm"></i> Generate Art</>
         )}

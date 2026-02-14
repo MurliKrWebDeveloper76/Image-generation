@@ -41,8 +41,9 @@ export interface AIStudio {
 
 declare global {
   interface Window {
-    // The environment may provide this object to handle secure key selection.
-    // Making it optional to match identical modifiers across potential global declarations.
-    aistudio?: AIStudio;
+    // The environment provides this object to handle secure key selection.
+    // Using 'any' to resolve the 'Subsequent property declarations must have the same type' 
+    // conflict when it is already defined by the platform environment.
+    aistudio: any;
   }
 }

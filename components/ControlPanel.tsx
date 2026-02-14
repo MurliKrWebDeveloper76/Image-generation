@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { AspectRatio, ModelType, ImageSize, GenerationSettings } from '../types';
 
 interface ControlPanelProps {
@@ -13,27 +13,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
   const aspectRatios: AspectRatio[] = ["1:1", "3:4", "4:3", "9:16", "16:9"];
   const imageSizes: ImageSize[] = ["1K", "2K", "4K"];
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [hasApiKey, setHasApiKey] = useState<boolean>(true); // Default true to prevent immediate flicker
-
-  useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio) {
-        const has = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(has);
-      }
-    };
-    checkKey();
-    const interval = setInterval(checkKey, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleSelectKey = async () => {
-    if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      // Assume success due to race condition rules
-      setHasApiKey(true);
-    }
-  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,10 +96,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
           >
             <div className={`w-2 h-2 rounded-full ${settings.model === 'gemini-2.5-flash-image' ? 'bg-blue-400 shadow-[0_0_8px_#3b82f6]' : 'bg-slate-700'}`}></div>
             <div className="text-left flex-1">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-bold">Flash 2.5</div>
-                {!hasApiKey && <span className="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded">KEY?</span>}
-              </div>
+              <div className="text-xs font-bold">Flash 2.5</div>
               <div className="text-[9px] text-slate-500 uppercase tracking-tighter">Fast & Responsive</div>
             </div>
           </button>
@@ -134,31 +110,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
           >
             <div className={`w-2 h-2 rounded-full ${settings.model === 'gemini-3-pro-image-preview' ? 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]' : 'bg-slate-700'}`}></div>
             <div className="text-left flex-1">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-bold">Studio Pro 3</div>
-                {!hasApiKey && <span className="text-[8px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded">KEY REQ</span>}
-              </div>
+              <div className="text-xs font-bold">Studio Pro 3</div>
               <div className="text-[9px] text-slate-500 uppercase tracking-tighter">Artistic Quality + Search</div>
             </div>
           </button>
         </div>
       </section>
-
-      {!hasApiKey && (
-        <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl animate-in fade-in slide-in-from-top-4 duration-500">
-          <p className="text-[10px] text-amber-300/80 mb-3 font-medium leading-relaxed">
-            <i className="fas fa-key mr-1.5"></i> 
-            Generation requires a selected API key in this environment. 
-            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline ml-1">Docs</a>
-          </p>
-          <button 
-            onClick={handleSelectKey}
-            className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all"
-          >
-            Select API Key
-          </button>
-        </div>
-      )}
 
       <section>
         <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-4">Composition</h3>
@@ -202,9 +159,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ settings, setSettings, isGe
 
       <button
         onClick={onGenerate}
-        disabled={isGenerating || !settings.prompt.trim() || !hasApiKey}
+        disabled={isGenerating || !settings.prompt.trim()}
         className={`w-full mt-4 py-4 rounded-xl font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 btn-premium shadow-xl ${
-          isGenerating || !settings.prompt.trim() || !hasApiKey
+          isGenerating || !settings.prompt.trim()
             ? 'bg-slate-950/50 text-slate-700 cursor-not-allowed border border-white/5'
             : 'accent-gradient text-white hover:shadow-blue-500/20'
         }`}

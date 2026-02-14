@@ -4,6 +4,7 @@ import { GenerationSettings, GroundingSource } from "../types";
 
 // Generate an image using the Gemini API models.
 export const generateImage = async (settings: GenerationSettings): Promise<{ imageUrl: string; text?: string; sources?: GroundingSource[] }> => {
+  // Use the API_KEY exclusively from environment variable as required.
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -11,7 +12,8 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
   }
 
   // Always create a new instance right before making an API call to ensure it uses the most up-to-date API key.
-  const ai = new GoogleGenAI({ apiKey });
+  // Using process.env.API_KEY directly in the named parameter.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const config: any = {
     imageConfig: {
@@ -59,7 +61,7 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
       throw new Error(`Generation stopped early: ${candidate.finishReason}. Try a different prompt.`);
     }
 
-    // Extract image and text from the response parts
+    // Extract image and text from the response parts, iterating through all parts as recommended.
     if (candidate.content && candidate.content.parts) {
       for (const part of candidate.content.parts) {
         if (part.inlineData) {

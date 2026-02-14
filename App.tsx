@@ -5,7 +5,7 @@ import { generateImage } from './services/geminiService';
 import ControlPanel from './components/ControlPanel';
 import ImageCard from './components/ImageCard';
 
-const STORAGE_KEY = 'visionforge_v2_history';
+const STORAGE_KEY = 'visionforge_v3_history';
 
 const LOADING_MESSAGES = [
   "Initializing neural pathways...",
@@ -18,7 +18,6 @@ const LOADING_MESSAGES = [
   "Finalizing creative output..."
 ];
 
-// Component to show while an image is being generated
 const SkeletonCard = () => {
   const [msgIdx, setMsgIdx] = useState(0);
 
@@ -60,9 +59,29 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showKeySelection, setShowKeySelection] = useState(false);
   const studioRef = useRef<HTMLDivElement>(null);
 
-  // Load history from localStorage on mount
+  // Initial check for API Key availability at startup
+  useEffect(() => {
+    const checkKeyStatus = async () => {
+      // If we already have an environment key, no need to show onboarding
+      if (process.env.API_KEY) return;
+
+      if (window.aistudio) {
+        try {
+          const hasSelected = await window.aistudio.hasSelectedApiKey();
+          if (!hasSelected) {
+            setShowKeySelection(true);
+          }
+        } catch (e) {
+          console.warn("Key status check failed:", e);
+        }
+      }
+    };
+    checkKeyStatus();
+  }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -75,18 +94,22 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Persist history to localStorage
   useEffect(() => {
-    if (history.length >= 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   }, [history]);
+
+  const handleKeySelection = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      // Assume success due to platform race conditions; the generates will handle failures
+      setShowKeySelection(false);
+    }
+  };
 
   const scrollToStudio = () => {
     studioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  // Main generation handler
   const handleGenerate = async () => {
     if (!settings.prompt.trim()) return;
     setIsGenerating(true);
@@ -94,15 +117,6 @@ const App: React.FC = () => {
     scrollToStudio();
 
     try {
-      // Check for API key presence if window.aistudio is available
-      if (window.aistudio) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        // If it's a Pro model or if we previously got an API error, ensure a key is selected
-        if (!hasKey && (settings.model === 'gemini-3-pro-image-preview' || error?.includes("Key"))) {
-          await window.aistudio.openSelectKey();
-        }
-      }
-
       const result = await generateImage(settings);
       
       const newImage: GeneratedImage = {
@@ -122,11 +136,9 @@ const App: React.FC = () => {
       setHistory(prev => [newImage, ...prev]);
     } catch (err: any) {
       console.error("App generation error:", err);
-      if (err.message === 'API_KEY_ERROR' || err.message.includes("API Key")) {
-        setError("API Key required. Please select a valid API key from a paid project to enable generation.");
-        if (window.aistudio) {
-          await window.aistudio.openSelectKey();
-        }
+      if (err.message === 'API_KEY_ERROR' || err.message.includes("API Key") || err.message.includes("403")) {
+        setError("A valid API Key from a paid project is required for generation.");
+        setShowKeySelection(true);
       } else if (err.message.includes("safety")) {
         setError("Content policy violation: The prompt or result was filtered for safety.");
       } else {
@@ -163,10 +175,45 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen text-slate-200 selection:bg-blue-500/30">
-      {/* Dynamic Background Elements */}
+      {/* Dynamic Key Selection Onboarding Modal */}
+      {showKeySelection && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-2xl"></div>
+          <div className="relative glass p-10 rounded-3xl border-blue-500/20 max-w-lg w-full text-center shadow-[0_0_100px_rgba(59,130,246,0.15)] animate-in fade-in zoom-in duration-500">
+            <div className="w-20 h-20 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-8 border border-blue-500/20">
+              <i className="fas fa-key text-blue-400 text-3xl"></i>
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">Access Restricted</h2>
+            <p className="text-slate-400 mb-8 leading-relaxed font-medium">
+              To enable AI generation features, you must select an active API key from a paid Google Cloud project.
+              <br />
+              <a 
+                href="https://ai.google.dev/gemini-api/docs/billing" 
+                target="_blank" 
+                className="text-blue-400 underline hover:text-blue-300 transition-colors mt-2 inline-block text-xs font-bold uppercase tracking-widest"
+              >
+                Billing Documentation
+              </a>
+            </p>
+            <button 
+              onClick={handleKeySelection}
+              className="w-full py-4 accent-gradient rounded-xl font-bold uppercase tracking-widest text-white shadow-xl hover:scale-[1.02] active:scale-95 transition-all glow-hover"
+            >
+              Select Paid API Key
+            </button>
+            <button 
+              onClick={() => setShowKeySelection(false)}
+              className="mt-6 text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] hover:text-slate-300 transition-all"
+            >
+              Continue as Guest
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Background Ambience */}
       <div className="bg-blob top-[-200px] left-[-200px] opacity-20"></div>
       <div className="bg-blob bottom-[-400px] right-[-300px] opacity-10"></div>
-      <div className="bg-blob top-[40%] left-[60%] w-[500px] h-[500px] opacity-[0.05] animate-pulse"></div>
 
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-[100] px-8 py-5 border-b border-white/5 bg-slate-950/60 backdrop-blur-xl">
@@ -186,7 +233,7 @@ const App: React.FC = () => {
               onClick={scrollToStudio}
               className="px-5 py-2 accent-gradient rounded-full text-white glow-hover transition-all btn-premium active:scale-95 text-xs"
             >
-              Start Creating
+              Enter Workspace
             </button>
           </div>
         </div>
@@ -239,10 +286,6 @@ const App: React.FC = () => {
                 <h2 className="text-xs font-bold flex items-center gap-2 text-slate-400 uppercase tracking-widest">
                   <i className="fas fa-terminal text-blue-400"></i> Prompt Engine
                 </h2>
-                <div className="flex gap-4">
-                  <button className="text-[10px] text-slate-500 hover:text-blue-400 transition-all uppercase font-bold tracking-widest">Templates</button>
-                  <button className="text-[10px] text-slate-500 hover:text-blue-400 transition-all uppercase font-bold tracking-widest">Optimize</button>
-                </div>
               </div>
               <div className="relative">
                 <textarea
@@ -252,26 +295,13 @@ const App: React.FC = () => {
                   placeholder={settings.referenceImage ? "Instruct the AI to transform this seed image..." : "A hyper-realistic cyberpunk city at night, neon lights reflecting on wet asphalt, cinematic lighting, 8k resolution..."}
                   className="w-full h-40 bg-slate-950/30 border border-white/5 rounded-xl p-6 text-lg text-slate-100 focus:outline-none focus:border-blue-500/30 resize-none transition-all placeholder:text-slate-600 focus:bg-slate-950/50 shadow-inner"
                 />
-                <div className="absolute bottom-4 right-4 flex items-center gap-3">
-                  <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">{settings.prompt.length} Chars</span>
-                  {settings.prompt && (
-                    <button 
-                      onClick={() => setSettings(prev => ({ ...prev, prompt: '' }))}
-                      className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500 hover:text-white transition-all shadow-md"
-                    >
-                      <i className="fas fa-times text-[10px]"></i>
-                    </button>
-                  )}
-                </div>
               </div>
               {error && (
                 <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400 font-bold text-xs uppercase tracking-tight animate-in slide-in-from-left-2 duration-300">
                   <i className="fas fa-circle-exclamation text-sm mt-0.5"></i>
                   <div className="flex-1">
                     <p>{error}</p>
-                    {(error.includes("Key") || error.includes("API")) && (
-                       <button onClick={() => window.aistudio?.openSelectKey()} className="mt-2 text-blue-400 underline uppercase tracking-widest text-[10px] block">Update API Key Selection</button>
-                    )}
+                    <button onClick={handleKeySelection} className="mt-2 text-blue-400 underline uppercase tracking-widest text-[10px] block text-left">Update API Key Selection</button>
                   </div>
                 </div>
               )}
@@ -286,14 +316,12 @@ const App: React.FC = () => {
                   </h2>
                   <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[9px] font-bold border border-blue-500/20">{history.length}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                   <button 
-                    onClick={() => setHistory([])}
-                    className="text-[10px] font-bold text-slate-600 hover:text-red-400 transition-all uppercase tracking-widest"
-                  >
-                    Clear All
-                  </button>
-                </div>
+                <button 
+                  onClick={() => setHistory([])}
+                  className="text-[10px] font-bold text-slate-600 hover:text-red-400 transition-all uppercase tracking-widest"
+                >
+                  Clear History
+                </button>
               </div>
 
               <div className="columns-1 md:columns-2 gap-6 space-y-6">
@@ -303,8 +331,7 @@ const App: React.FC = () => {
                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6 transition-transform group-hover:scale-110 shadow-inner">
                       <i className="fas fa-palette text-slate-700 text-2xl"></i>
                     </div>
-                    <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-[10px] mb-2">No active sessions</p>
-                    <p className="text-slate-800 font-medium text-[9px] uppercase tracking-widest">Start generating to build your collection</p>
+                    <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-[10px]">Ready for synthesis</p>
                   </div>
                 ) : (
                   history.map(image => (
@@ -325,7 +352,7 @@ const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="mt-32 border-t border-white/5 bg-slate-950/40 py-20 px-8">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10 text-center md:text-left">
           <div className="flex flex-col items-center md:items-start gap-4">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 accent-gradient rounded-lg flex items-center justify-center shadow-lg">
@@ -333,19 +360,10 @@ const App: React.FC = () => {
               </div>
               <span className="text-lg font-bold tracking-tight text-white uppercase">VisionForge</span>
             </div>
-            <p className="text-slate-600 text-[10px] font-medium max-w-xs text-center md:text-left uppercase tracking-widest leading-loose">
-              Harnessing Gemini Multimodal Intelligence to push the boundaries of synthetic media.
-            </p>
+            <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest">Synthetic Media Workspace</p>
           </div>
-          
-          <div className="flex flex-col items-center md:items-end gap-2 text-center md:text-right">
-            <div className="flex gap-6 mb-4 text-slate-600 text-lg">
-              <i className="fab fa-twitter hover:text-blue-400 cursor-pointer transition-colors"></i>
-              <i className="fab fa-discord hover:text-blue-400 cursor-pointer transition-colors"></i>
-              <i className="fab fa-github hover:text-blue-400 cursor-pointer transition-colors"></i>
-            </div>
-            <p className="text-[10px] font-black text-slate-700 uppercase tracking-[0.3em]">AI Studio Environment Ready</p>
-            <p className="text-sm font-bold text-slate-400">© 2025 VisionForge Studio. MIT Licensed.</p>
+          <div className="text-slate-500 text-xs">
+            © 2025 VisionForge Studio. MIT Licensed.
           </div>
         </div>
       </footer>

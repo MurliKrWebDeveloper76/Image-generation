@@ -33,19 +33,16 @@ export interface GenerationSettings {
 
 /**
  * AIStudio interface for managing API keys within the environment.
- * Defined in global scope to align with existing environment definitions and prevent type mismatch errors.
  */
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-
-  interface Window {
-    // Removed readonly and optional modifiers to resolve identical modifiers error with pre-configured environment declarations.
-    aistudio: AIStudio;
-  }
+export interface AIStudio {
+  hasSelectedApiKey: () => Promise<boolean>;
+  openSelectKey: () => Promise<void>;
 }
 
-// Export the type alias to maintain compatibility with consumers.
-export type AIStudioType = AIStudio;
+declare global {
+  interface Window {
+    // The environment may provide this object to handle secure key selection.
+    // Making it optional to match identical modifiers across potential global declarations.
+    aistudio?: AIStudio;
+  }
+}

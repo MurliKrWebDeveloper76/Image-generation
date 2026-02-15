@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GenerationSettings, GeneratedImage } from './types';
-import { generateImage } from './services/geminiService';
+import { generateImage, enhancePrompt } from './services/geminiService';
 import ControlPanel from './components/ControlPanel';
 import ImageCard from './components/ImageCard';
 
@@ -58,27 +58,30 @@ const App: React.FC = () => {
 
   const [history, setHistory] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [shouldEnhance, setShouldEnhance] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showKeySelection, setShowKeySelection] = useState(false);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const studioRef = useRef<HTMLDivElement>(null);
 
-  // Initial check for API Key availability at startup
-  useEffect(() => {
-    const checkKeyStatus = async () => {
-      // If we already have an environment key, no need to show onboarding
-      if (process.env.API_KEY) return;
-
-      if (window.aistudio) {
-        try {
-          const hasSelected = await window.aistudio.hasSelectedApiKey();
-          if (!hasSelected) {
-            setShowKeySelection(true);
-          }
-        } catch (e) {
-          console.warn("Key status check failed:", e);
-        }
+  const checkKeyStatus = async () => {
+    if (process.env.API_KEY) {
+      setHasKey(true);
+      return;
+    }
+    if (window.aistudio) {
+      try {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected);
+        if (!selected) setShowKeySelection(true);
+      } catch (e) {
+        setHasKey(false);
       }
-    };
+    }
+  };
+
+  useEffect(() => {
     checkKeyStatus();
   }, []);
 
@@ -101,8 +104,8 @@ const App: React.FC = () => {
   const handleKeySelection = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
-      // Assume success due to platform race conditions; the generates will handle failures
       setShowKeySelection(false);
+      setHasKey(true);
     }
   };
 
@@ -116,13 +119,21 @@ const App: React.FC = () => {
     setError(null);
     scrollToStudio();
 
+    let finalPrompt = settings.prompt;
+
     try {
-      const result = await generateImage(settings);
+      if (shouldEnhance) {
+        setIsEnhancing(true);
+        finalPrompt = await enhancePrompt(settings.prompt);
+        setIsEnhancing(false);
+      }
+
+      const result = await generateImage({ ...settings, prompt: finalPrompt });
       
       const newImage: GeneratedImage = {
         id: Math.random().toString(36).substring(7),
         url: result.imageUrl,
-        prompt: settings.prompt,
+        prompt: finalPrompt,
         timestamp: Date.now(),
         sources: result.sources,
         config: {
@@ -136,16 +147,18 @@ const App: React.FC = () => {
       setHistory(prev => [newImage, ...prev]);
     } catch (err: any) {
       console.error("App generation error:", err);
-      if (err.message === 'API_KEY_ERROR' || err.message.includes("API Key") || err.message.includes("403")) {
-        setError("A valid API Key from a paid project is required for generation.");
+      if (err.message === 'API_KEY_ERROR') {
+        setError("API Key selection required for local workspace.");
         setShowKeySelection(true);
+        setHasKey(false);
       } else if (err.message.includes("safety")) {
-        setError("Content policy violation: The prompt or result was filtered for safety.");
+        setError("Content policy violation: The prompt or result was filtered.");
       } else {
         setError(err.message || "An unexpected error occurred during synthesis.");
       }
     } finally {
       setIsGenerating(false);
+      setIsEnhancing(false);
     }
   };
 
@@ -175,7 +188,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen text-slate-200 selection:bg-blue-500/30">
-      {/* Dynamic Key Selection Onboarding Modal */}
+      {/* Key Selection Modal */}
       {showKeySelection && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center px-6">
           <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-2xl"></div>
@@ -183,30 +196,19 @@ const App: React.FC = () => {
             <div className="w-20 h-20 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-8 border border-blue-500/20">
               <i className="fas fa-key text-blue-400 text-3xl"></i>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">Access Restricted</h2>
+            <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">API Key Required</h2>
             <p className="text-slate-400 mb-8 leading-relaxed font-medium">
-              To enable AI generation features, you must select an active API key from a paid Google Cloud project.
+              To enable local image generation, you must select an active API key from a paid project.
               <br />
-              <a 
-                href="https://ai.google.dev/gemini-api/docs/billing" 
-                target="_blank" 
-                className="text-blue-400 underline hover:text-blue-300 transition-colors mt-2 inline-block text-xs font-bold uppercase tracking-widest"
-              >
-                Billing Documentation
-              </a>
+              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-blue-400 underline hover:text-blue-300 transition-colors mt-2 inline-block text-xs font-bold uppercase tracking-widest">Billing Docs</a>
             </p>
             <button 
               onClick={handleKeySelection}
               className="w-full py-4 accent-gradient rounded-xl font-bold uppercase tracking-widest text-white shadow-xl hover:scale-[1.02] active:scale-95 transition-all glow-hover"
             >
-              Select Paid API Key
+              Select Secure Local Key
             </button>
-            <button 
-              onClick={() => setShowKeySelection(false)}
-              className="mt-6 text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] hover:text-slate-300 transition-all"
-            >
-              Continue as Guest
-            </button>
+            <button onClick={() => setShowKeySelection(false)} className="mt-6 text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] hover:text-slate-300">Close</button>
           </div>
         </div>
       )}
@@ -224,14 +226,26 @@ const App: React.FC = () => {
             </div>
             <span className="text-xl font-bold tracking-tight text-white flex items-center">
               Vision<span className="text-blue-400">Forge</span>
-              <span className="ml-2 px-1.5 py-0.5 rounded-md bg-white/5 text-[9px] font-black text-slate-500 border border-white/5 tracking-widest uppercase">3.0</span>
+              <span className="ml-2 px-1.5 py-0.5 rounded-md bg-white/5 text-[9px] font-black text-slate-500 border border-white/5 tracking-widest uppercase">Local</span>
             </span>
           </div>
-          <div className="hidden md:flex items-center gap-10 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            <a href="#studio" className="hover:text-blue-400 transition-colors">Studio</a>
+          
+          <div className="flex items-center gap-6">
+            <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-white/5 rounded-full border border-white/5">
+              <span className={`w-2 h-2 rounded-full ${hasKey ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                API Status: {hasKey ? 'Securely Connected' : 'Action Required'}
+              </span>
+              <button 
+                onClick={handleKeySelection} 
+                className="ml-2 text-[9px] px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20 hover:bg-blue-500/20 transition-all font-black"
+              >
+                MANAGE
+              </button>
+            </div>
             <button 
               onClick={scrollToStudio}
-              className="px-5 py-2 accent-gradient rounded-full text-white glow-hover transition-all btn-premium active:scale-95 text-xs"
+              className="px-5 py-2 accent-gradient rounded-full text-white glow-hover transition-all btn-premium active:scale-95 text-xs font-bold uppercase tracking-widest"
             >
               Enter Workspace
             </button>
@@ -247,10 +261,10 @@ const App: React.FC = () => {
             Multi-Model AI Infrastructure Active
           </div>
           <h1 className="text-5xl md:text-7xl font-bold mb-8 leading-[1.1] tracking-tight text-white">
-            Synthetic <span className="text-gradient">Imagination</span> <br /> Forged in Pixels.
+            Synthetic <span className="text-gradient">Imagination</span> <br /> Forged Locally.
           </h1>
           <p className="text-lg md:text-xl text-slate-400 mb-12 max-w-2xl mx-auto font-medium leading-relaxed">
-            A premium workspace for AI art generation. Harness Gemini 2.5 Flash and Studio Pro 3 for high-fidelity visuals.
+            A premium workspace for AI art generation. Harness Gemini 2.5 Flash and Studio Pro 3 with secure local API integration.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <button 
@@ -286,22 +300,39 @@ const App: React.FC = () => {
                 <h2 className="text-xs font-bold flex items-center gap-2 text-slate-400 uppercase tracking-widest">
                   <i className="fas fa-terminal text-blue-400"></i> Prompt Engine
                 </h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Enhancer</span>
+                  <button 
+                    onClick={() => setShouldEnhance(!shouldEnhance)}
+                    className={`w-10 h-5 rounded-full relative transition-all border ${shouldEnhance ? 'bg-blue-600 border-blue-400' : 'bg-slate-800 border-white/5'}`}
+                  >
+                    <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${shouldEnhance ? 'left-5.5' : 'left-1'}`}></div>
+                  </button>
+                </div>
               </div>
               <div className="relative">
                 <textarea
                   value={settings.prompt}
                   onChange={(e) => setSettings(prev => ({ ...prev, prompt: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleGenerate()}
-                  placeholder={settings.referenceImage ? "Instruct the AI to transform this seed image..." : "A hyper-realistic cyberpunk city at night, neon lights reflecting on wet asphalt, cinematic lighting, 8k resolution..."}
+                  placeholder={settings.referenceImage ? "Instruct the AI to transform this seed image..." : "A hyper-realistic cyberpunk city at night, neon lights reflecting on wet asphalt..."}
                   className="w-full h-40 bg-slate-950/30 border border-white/5 rounded-xl p-6 text-lg text-slate-100 focus:outline-none focus:border-blue-500/30 resize-none transition-all placeholder:text-slate-600 focus:bg-slate-950/50 shadow-inner"
                 />
+                {isEnhancing && (
+                  <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center rounded-xl z-10 animate-in fade-in duration-300">
+                    <div className="flex flex-col items-center gap-4">
+                      <i className="fas fa-wand-magic-sparkles text-blue-400 text-2xl animate-pulse"></i>
+                      <span className="text-xs font-bold text-white uppercase tracking-widest">Enhancing your prompt with Gemini...</span>
+                    </div>
+                  </div>
+                )}
               </div>
               {error && (
                 <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400 font-bold text-xs uppercase tracking-tight animate-in slide-in-from-left-2 duration-300">
                   <i className="fas fa-circle-exclamation text-sm mt-0.5"></i>
                   <div className="flex-1">
                     <p>{error}</p>
-                    <button onClick={handleKeySelection} className="mt-2 text-blue-400 underline uppercase tracking-widest text-[10px] block text-left">Update API Key Selection</button>
+                    <button onClick={handleKeySelection} className="mt-2 text-blue-400 underline uppercase tracking-widest text-[10px] block text-left">Update Key Selection</button>
                   </div>
                 </div>
               )}
@@ -316,12 +347,7 @@ const App: React.FC = () => {
                   </h2>
                   <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[9px] font-bold border border-blue-500/20">{history.length}</span>
                 </div>
-                <button 
-                  onClick={() => setHistory([])}
-                  className="text-[10px] font-bold text-slate-600 hover:text-red-400 transition-all uppercase tracking-widest"
-                >
-                  Clear History
-                </button>
+                <button onClick={() => setHistory([])} className="text-[10px] font-bold text-slate-600 hover:text-red-400 transition-all uppercase tracking-widest">Clear History</button>
               </div>
 
               <div className="columns-1 md:columns-2 gap-6 space-y-6">
@@ -360,7 +386,7 @@ const App: React.FC = () => {
               </div>
               <span className="text-lg font-bold tracking-tight text-white uppercase">VisionForge</span>
             </div>
-            <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest">Synthetic Media Workspace</p>
+            <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest">Local API Synthetic Workspace</p>
           </div>
           <div className="text-slate-500 text-xs">
             © 2025 VisionForge Studio. MIT Licensed.

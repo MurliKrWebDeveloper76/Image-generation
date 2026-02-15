@@ -2,9 +2,31 @@
 import { GoogleGenAI } from "@google/genai";
 import { GenerationSettings, GroundingSource } from "../types";
 
-// Generate an image using the Gemini API models.
+/**
+ * Uses Gemini 3 Flash to expand a simple user prompt into a high-detail artistic description.
+ */
+export const enhancePrompt = async (prompt: string): Promise<string> => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_ERROR");
+
+  const ai = new GoogleGenAI({ apiKey });
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `You are an expert AI prompt engineer. Expand the following simple description into a highly detailed, artistic, and visually descriptive prompt for an image generator. Focus on lighting, texture, composition, and mood. Keep it under 75 words. 
+      Original: "${prompt}"`,
+    });
+    return response.text || prompt;
+  } catch (e) {
+    console.warn("Prompt enhancement failed, using original:", e);
+    return prompt;
+  }
+};
+
+/**
+ * Generate an image using the Gemini API models.
+ */
 export const generateImage = async (settings: GenerationSettings): Promise<{ imageUrl: string; text?: string; sources?: GroundingSource[] }> => {
-  // Use the API_KEY exclusively from environment variable as required.
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -12,7 +34,6 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
   }
 
   // Always create a new instance right before making an API call to ensure it uses the most up-to-date API key.
-  // Using process.env.API_KEY directly in the named parameter.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const config: any = {
@@ -61,7 +82,7 @@ export const generateImage = async (settings: GenerationSettings): Promise<{ ima
       throw new Error(`Generation stopped early: ${candidate.finishReason}. Try a different prompt.`);
     }
 
-    // Extract image and text from the response parts, iterating through all parts as recommended.
+    // Extract image and text from the response parts
     if (candidate.content && candidate.content.parts) {
       for (const part of candidate.content.parts) {
         if (part.inlineData) {
